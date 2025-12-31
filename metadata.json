@@ -1,0 +1,7 @@
+{
+  "name": "ZenWealth - 和風資產管理",
+  "description": "一款結合日式極簡美學與 Gemini AI 的資產管理工具。支援美股、台股及現金額度追蹤，具備即時匯率轉換與 AI 影像風格化功能。",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
