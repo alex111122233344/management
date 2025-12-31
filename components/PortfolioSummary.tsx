@@ -1,11 +1,11 @@
 
 import React from 'react';
 import { Asset, ExchangeRate, Currency } from '../types';
-import { TrendingUp, Package, RefreshCcw, Eye, EyeOff, ArrowUpRight } from 'lucide-react';
+import { Package, RefreshCcw, Eye, EyeOff, ArrowUpRight, ExternalLink } from 'lucide-react';
 
 interface PortfolioSummaryProps {
   assets: Asset[];
-  rates: ExchangeRate;
+  rates: ExchangeRate & { sources?: { uri: string; title: string }[] };
   onRefresh: () => void;
   isRefreshing: boolean;
   isAmountHidden: boolean;
@@ -31,54 +31,73 @@ const PortfolioSummary: React.FC<PortfolioSummaryProps> = ({
     ? "*******" 
     : `$${totalTwd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
-  // 模擬資產日增率：根據當前時間與資產數量生成一個變動值
   const mockGrowth = assets.length > 0 ? (Math.sin(Date.now() / 100000) * 1.5 + 0.5).toFixed(2) : "0.00";
 
   return (
-    <div className="washi-card p-6 rounded-3xl mb-6 relative overflow-hidden">
+    <div className="washi-card p-6 rounded-3xl mb-6 relative overflow-hidden border border-[#e7e5e4] shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)]">
       <div className="flex justify-between items-start mb-6">
         <div className="flex flex-col">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs text-[#a8a29e] font-light tracking-widest uppercase">總資產估值 (TWD)</span>
+            <span className="text-[10px] text-[#a8a29e] font-black tracking-widest uppercase">總資產估值 (TWD)</span>
             <button onClick={onToggleHide} className="text-[#a8a29e] hover:text-[#78716c] transition-colors">
               {isAmountHidden ? <EyeOff size={14} /> : <Eye size={14} />}
             </button>
           </div>
-          <h1 className="text-3xl font-bold text-[#57534e]">
+          <h1 className="text-4xl font-bold text-[#57534e] tracking-tight">
             {displayVal}
           </h1>
         </div>
-        <div className="flex gap-2">
-          <button 
-            onClick={onRefresh}
-            disabled={isRefreshing}
-            className={`p-2 rounded-xl border border-[#e7e5e4] text-[#78716c] transition-all hover:bg-[#fafaf9] ${isRefreshing ? 'opacity-50' : 'active:scale-90'}`}
-          >
-            <RefreshCcw size={18} className={isRefreshing ? 'animate-spin' : ''} />
-          </button>
-        </div>
+        <button 
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          className={`p-3 rounded-2xl bg-[#fafaf9] border border-[#e7e5e4] text-[#78716c] transition-all hover:bg-white ${isRefreshing ? 'opacity-50 cursor-not-allowed' : 'active:scale-90'}`}
+        >
+          <RefreshCcw size={18} className={isRefreshing ? 'animate-spin' : ''} />
+        </button>
       </div>
 
-      <div className="flex gap-4">
-        <div className="flex-1 bg-[#f5f5f4] p-4 rounded-2xl flex items-center gap-3">
-          <div className="bg-white p-2 rounded-lg text-[#a8a29e] shadow-sm">
-            <Package size={18} />
+      <div className="flex gap-4 mb-4">
+        <div className="flex-1 bg-[#f5f5f4]/50 p-4 rounded-2xl flex items-center gap-3">
+          <div className="bg-white p-2 rounded-xl text-[#a8a29e] shadow-sm border border-[#e7e5e4]/50">
+            <Package size={16} />
           </div>
           <div>
-            <div className="text-[10px] text-[#a8a29e] leading-none mb-1 font-bold">資產項目</div>
-            <div className="text-sm font-bold text-[#57534e]">{assets.length} 項</div>
+            <div className="text-[9px] text-[#a8a29e] leading-none mb-1 font-black uppercase">資產項目</div>
+            <div className="text-sm font-bold text-[#57534e]">{assets.length} <span className="text-[10px] font-normal opacity-60">項</span></div>
           </div>
         </div>
-        <div className="flex-1 bg-[#f5f5f4] p-4 rounded-2xl flex items-center gap-3">
-          <div className="bg-white p-2 rounded-lg text-[#A1887F] shadow-sm">
-            <ArrowUpRight size={18} />
+        <div className="flex-1 bg-[#f5f5f4]/50 p-4 rounded-2xl flex items-center gap-3">
+          <div className="bg-white p-2 rounded-xl text-[#A1887F] shadow-sm border border-[#e7e5e4]/50">
+            <ArrowUpRight size={16} />
           </div>
           <div>
-            <div className="text-[10px] text-[#a8a29e] leading-none mb-1 font-bold">資產日增率</div>
+            <div className="text-[9px] text-[#a8a29e] leading-none mb-1 font-black uppercase">資產日增率</div>
             <div className="text-sm font-bold text-[#A1887F]">+{mockGrowth}%</div>
           </div>
         </div>
       </div>
+
+      {rates.sources && rates.sources.length > 0 && (
+        <div className="pt-3 border-t border-[#e7e5e4]/50">
+          <div className="flex items-center gap-2 mb-2">
+             <div className="w-1 h-1 bg-[#a8a29e] rounded-full"></div>
+             <span className="text-[9px] text-[#a8a29e] font-black uppercase tracking-wider">資訊來源</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {rates.sources.slice(0, 2).map((source, idx) => (
+              <a 
+                key={idx} 
+                href={source.uri} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-[9px] px-2 py-1 bg-[#f5f5f4] text-[#78716c] rounded-md flex items-center gap-1 hover:bg-[#e7e5e4] transition-colors"
+              >
+                {source.title.substring(0, 15)}... <ExternalLink size={8} />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
       
       {isRefreshing && (
         <div className="absolute bottom-0 left-0 w-full h-1 bg-[#e7e5e4] overflow-hidden">

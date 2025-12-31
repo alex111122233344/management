@@ -12,26 +12,25 @@ const STORAGE_KEY = 'zenwealth_assets';
 
 const App: React.FC = () => {
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [rates, setRates] = useState<ExchangeRate>({ usdToTwd: 32.5, jpyToTwd: 0.21, lastUpdate: Date.now() });
+  const [rates, setRates] = useState<ExchangeRate & { sources?: {uri:string, title:string}[] }>({ 
+    usdToTwd: 32.5, 
+    jpyToTwd: 0.21, 
+    lastUpdate: Date.now(),
+    sources: []
+  });
   const [showForm, setShowForm] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isAmountHidden, setIsAmountHidden] = useState(false);
 
-  // Load initial data
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       setAssets(JSON.parse(saved));
     }
-    
-    // Initial rate fetch
-    fetchExchangeRates().then(newRates => {
-      setRates({ usdToTwd: newRates.usd, jpyToTwd: newRates.jpy, lastUpdate: Date.now() });
-    });
+    handleRefresh();
   }, []);
 
-  // Save to local storage whenever assets change
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(assets));
   }, [assets]);
@@ -40,19 +39,24 @@ const App: React.FC = () => {
     if (isRefreshing) return;
     setIsRefreshing(true);
     try {
-      const newRates = await fetchExchangeRates();
-      setRates({ usdToTwd: newRates.usd, jpyToTwd: newRates.jpy, lastUpdate: Date.now() });
+      const rateResult = await fetchExchangeRates();
+      setRates({ 
+        usdToTwd: rateResult.usd, 
+        jpyToTwd: rateResult.jpy, 
+        lastUpdate: Date.now(),
+        sources: rateResult.sources
+      });
       
-      const priceMap = await fetchStockPrices(assets);
-      
-      setAssets(prev => prev.map(asset => {
-        const newPrice = priceMap[asset.symbol];
-        if (newPrice) {
-          return { ...asset, price: newPrice, updatedAt: Date.now() };
-        }
-        return asset;
-      }));
-      
+      if (assets.length > 0) {
+        const priceMap = await fetchStockPrices(assets);
+        setAssets(prev => prev.map(asset => {
+          const newPrice = priceMap[asset.symbol];
+          if (newPrice) {
+            return { ...asset, price: newPrice, updatedAt: Date.now() };
+          }
+          return asset;
+        }));
+      }
     } catch (error) {
       console.error("Refresh failed:", error);
     } finally {
@@ -84,27 +88,23 @@ const App: React.FC = () => {
     setShowForm(true);
   };
 
-  const handleAddClick = () => {
-    setEditingAsset(null);
-    setShowForm(true);
-  };
-
   return (
-    <div className="min-h-screen max-w-lg mx-auto px-4 pt-8 pb-32">
-      <header className="mb-8 flex justify-between items-center px-2">
+    <div className="min-h-screen japanese-bg max-w-lg mx-auto px-4 pt-8 pb-40">
+      <header className="mb-8 flex justify-between items-end px-2">
         <div>
-          <h1 className="text-2xl font-bold text-[#57534e] tracking-tight">資產管理 AI</h1>
-          <p className="text-[10px] text-[#a8a29e] tracking-[0.2em] uppercase font-light">Japanese Minimalist Finance</p>
+          <p className="text-[10px] text-[#a8a29e] tracking-[0.3em] uppercase font-black mb-1 opacity-60">ZenWealth Portfolio</p>
+          <h1 className="text-3xl font-bold text-[#57534e] tracking-tighter">和風資產</h1>
         </div>
-        <div className="text-right">
-            <span className="text-[10px] text-[#a8a29e] block font-medium uppercase">最後更新</span>
-            <span className="text-[10px] font-bold text-[#78716c]">
+        <div className="text-right pb-1">
+            <span className="text-[9px] text-[#a8a29e] block font-black uppercase tracking-widest mb-0.5">Updated At</span>
+            <span className="text-xs font-bold text-[#78716c]">
               {new Date(rates.lastUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
         </div>
       </header>
 
-      <main>
+      <main className="space-y-8">
+        {/* 總覽卡片 */}
         <PortfolioSummary 
           assets={assets} 
           rates={rates} 
@@ -114,8 +114,10 @@ const App: React.FC = () => {
           onToggleHide={() => setIsAmountHidden(!isAmountHidden)}
         />
         
+        {/* 圖表分析 */}
         <AssetPieChart assets={assets} rates={rates} isAmountHidden={isAmountHidden} />
 
+        {/* 資產清單 */}
         <AssetList 
           assets={assets} 
           rates={rates} 
@@ -125,14 +127,14 @@ const App: React.FC = () => {
         />
       </main>
 
-      {/* 底部懸浮新增按鈕 - 移動至下方中央位置 */}
-      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
+      {/* 底部置中新增按鈕 */}
+      <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50">
         <button 
-          onClick={handleAddClick}
-          className="w-16 h-16 bg-[#57534e] text-white rounded-full shadow-2xl flex items-center justify-center active:scale-90 hover:scale-105 transition-all ring-4 ring-white/50"
+          onClick={() => { setEditingAsset(null); setShowForm(true); }}
+          className="w-16 h-16 bg-[#57534e] text-[#fafaf9] rounded-full shadow-[0_10px_30px_-5px_rgba(87,83,78,0.4)] flex items-center justify-center active:scale-90 hover:scale-105 transition-all ring-4 ring-white"
           aria-label="新增資產"
         >
-          <Plus size={32} />
+          <Plus size={32} strokeWidth={2.5} />
         </button>
       </div>
 
@@ -140,10 +142,7 @@ const App: React.FC = () => {
         <AssetForm 
           initialAsset={editingAsset}
           onSave={handleSaveAsset}
-          onCancel={() => {
-            setShowForm(false);
-            setEditingAsset(null);
-          }}
+          onCancel={() => { setShowForm(false); setEditingAsset(null); }}
         />
       )}
     </div>

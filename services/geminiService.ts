@@ -1,13 +1,16 @@
 
-import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { Asset } from "../types";
 
 const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-/**
- * Fetches the latest USD/TWD and JPY/TWD exchange rates using Google Search.
- */
-export const fetchExchangeRates = async (): Promise<{ usd: number; jpy: number }> => {
+export interface ExchangeRateResult {
+  usd: number;
+  jpy: number;
+  sources?: { uri: string; title: string }[];
+}
+
+export const fetchExchangeRates = async (): Promise<ExchangeRateResult> => {
   const ai = getAI();
   try {
     const response = await ai.models.generateContent({
@@ -19,22 +22,28 @@ export const fetchExchangeRates = async (): Promise<{ usd: number; jpy: number }
     });
     
     const text = response.text || "";
-    const usdMatch = text.match(/usd["\s:]+(\d+\.\d+)/i);
-    const jpyMatch = text.match(/jpy["\s:]+(\d+\.\d+)/i);
+    const usdMatch = text.match(/usd["\s:]+([\d.]+)/i);
+    const jpyMatch = text.match(/jpy["\s:]+([\d.]+)/i);
+    
+    const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks
+      ?.filter(chunk => chunk.web)
+      .map(chunk => ({
+        uri: chunk.web?.uri || "",
+        title: chunk.web?.title || "來源"
+      })) || [];
     
     return {
       usd: usdMatch ? parseFloat(usdMatch[1]) : 32.5,
-      jpy: jpyMatch ? parseFloat(jpyMatch[1]) : 0.21
+      jpy: jpyMatch ? parseFloat(jpyMatch[1]) : 0.21,
+      sources
     };
-  } catch (error) {
-    console.error("Error fetching exchange rates:", error);
-    return { usd: 32.5, jpy: 0.21 };
+  } catch (error: any) {
+    // 處理 429 額度耗盡或其他 API 錯誤
+    console.warn("Gemini API Error (Rate Limit/Quota): Using fallback values.");
+    return { usd: 32.5, jpy: 0.21, sources: [] };
   }
 };
 
-/**
- * Fetches the current prices for a list of stock assets using Gemini Search.
- */
 export const fetchStockPrices = async (assets: Asset[]): Promise<Record<string, number>> => {
   const stockAssets = assets.filter(a => a.type !== 'CASH');
   if (stockAssets.length === 0) return {};
@@ -44,8 +53,8 @@ export const fetchStockPrices = async (assets: Asset[]): Promise<Record<string, 
   
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Find the current real-time stock prices for these tickers: ${tickers}. Return only a JSON object where keys are tickers and values are current prices in their native currency. Example: {"AAPL": 150.25, "2330": 600.00}`,
+      model: 'gemini-3-pro-preview',
+      contents: `Find current real-time stock prices for these tickers: ${tickers}. Return only a JSON object: {"TICKER": price}.`,
       config: {
         tools: [{ googleSearch: {} }],
       },
@@ -54,44 +63,42 @@ export const fetchStockPrices = async (assets: Asset[]): Promise<Record<string, 
     const text = response.text || "{}";
     const jsonMatch = text.match(/\{.*\}/s);
     if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
+      try {
+        return JSON.parse(jsonMatch[0]);
+      } catch (e) {
+        return {};
+      }
     }
     return {};
   } catch (error) {
-    console.error("Error fetching stock prices:", error);
+    console.warn("Gemini API Error for stock prices. Values will remain unchanged.");
     return {};
   }
 };
 
-/**
- * Edits an image based on user prompt using Gemini 2.5 Flash Image.
- */
-export const editImageWithAI = async (base64Image: string, prompt: string, mimeType: string): Promise<string | null> => {
+export const editImageWithAI = async (base64Data: string, prompt: string, mimeType: string): Promise<string | null> => {
   const ai = getAI();
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: {
         parts: [
-          {
-            inlineData: {
-              data: base64Image,
-              mimeType: mimeType,
-            },
-          },
+          { inlineData: { data: base64Data, mimeType } },
           { text: prompt },
         ],
       },
     });
 
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) {
-        return `data:${mimeType};base64,${part.inlineData.data}`;
+    if (response.candidates?.[0]?.content?.parts) {
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+          return `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
+        }
       }
     }
     return null;
   } catch (error) {
-    console.error("Error editing image with AI:", error);
+    console.error("AI Image error:", error);
     return null;
   }
 };
